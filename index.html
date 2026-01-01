@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Astro Auto Joiner</title>
+</head>
+<body>
+  <h2>Astro Auto Join Roblox Server</h2>
+  <script>
+    const PLACE_ID = "1767228497822";
+
+    const WEBHOOK_50M_100M = "https://discord.com/api/webhooks/1455286219507241195/2SmCZJhU1OURML54bkOyCCXYj_Hzn0GTXlwTkBRo7J2Il3PS4KXVe09Wp19xkHQbIgjR";
+    const WEBHOOK_100M_PLUS = "https://discord.com/api/webhooks/1456095227189399807/ftcUGyfMKJjI-p80KNjPk0k0Po7noOGeDx8rZJvPXmBa7ZcZ7OmmwmLIt39NXdLfgMpG";
+
+    const urlParams = new URLSearchParams(window.location.search);
+    let lastBrainrotsString = "";
+
+    function parseGeneration(text) {
+      if (!text) return 0;
+      let v = text.replace("$","").replace("/s","").trim();
+      let multiplier = 1;
+      if (v.includes("T")) { multiplier=1e12; v=v.replace("T",""); }
+      else if (v.includes("B")) { multiplier=1e9; v=v.replace("B",""); }
+      else if (v.includes("M")) { multiplier=1e6; v=v.replace("M",""); }
+      else if (v.includes("K")) { multiplier=1e3; v=v.replace("K",""); }
+      return parseFloat(v)*multiplier;
+    }
+
+    function sendToDiscord(brainrotList, playersCount, jobId) {
+      if (!brainrotList || brainrotList.length === 0) return;
+
+      // Decide webhook based on highest value
+      const highestValue = Math.max(...brainrotList.map(b=>b.value));
+      let webhook = null;
+      if (highestValue >= 50e6 && highestValue <= 100e6) webhook = WEBHOOK_50M_100M;
+      else if (highestValue > 100e6) webhook = WEBHOOK_100M_PLUS;
+      if (!webhook) return;
+
+      // Build embed description
+      let description = "★ Brainrots\n";
+      for (const b of brainrotList) {
+        description += `${b.count}x ${b.name}\n(${b.value>=1e6 ? (b.value/1e6).toFixed(2)+"M/s" : b.value})\n\n`;
+      }
+
+      // Thumbnail: use highest brainrot image
+      const highestBrainrotName = brainrotList[0].name;
+      const formattedName = highestBrainrotName.replace(/ /g, "_");
+      const imageUrl = `https://images-ext-1.discordapp.net/external/2kySdhK_WHdIBein0VhjlyObWd5sb91hOSI-ihQB1ec/%3Fcb%3D20250902180735/https/static.wikia.nocookie.net/stealabr/images/c/c6/${formattedName}_.png/revision/latest`;
+
+      const embed = {
+        username: "Astro Auto Joiner",
+        embeds: [{
+          title: "Brainrot Report",
+          description: description,
+          color: 3447003, // Blue
+          thumbnail: { url: imageUrl },
+          fields: [
+            {name: "📊 Players", value: playersCount.toString(), inline:true},
+            {name: "🆔 Job Id", value: jobId, inline:true},
+            {name: "⚠️ Join Server", value:`https://www.roblox.com/games/${PLACE_ID}/?privateServerLinkCode=${jobId}`, inline:false},
+            {name: "⏰ Time", value: new Date().toLocaleString(), inline:false}
+          ]
+        }]
+      };
+
+      fetch(webhook, {
+        method:"POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(embed)
+      }).catch(err=>console.warn("Webhook failed:", err));
+    }
+
+    function checkBrainrots() {
+      const brainrotsParam = urlParams.get("brainrots"); 
+      const jobId = urlParams.get("jobId") || "Unknown";
+      const playersCount = urlParams.get("players") || "Unknown";
+
+      if (!brainrotsParam) return;
+
+      // Parse brainrots list: Name1:$75M/s,Name2:$120M/s
+      const itemsRaw = brainrotsParam.split(",").map(x=>{
+        const [name,value] = x.split(":");
+        return {name:name.trim(), value:parseGeneration(value)};
+      });
+
+      // Count duplicates
+      const brainrotMap = {};
+      for (const b of itemsRaw) {
+        if (!brainrotMap[b.name]) brainrotMap[b.name] = {name:b.name, value:b.value, count:0};
+        brainrotMap[b.name].count += 1;
+      }
+
+      const brainrotList = Object.values(brainrotMap);
+
+      // Convert to string to detect changes
+      const currentString = JSON.stringify(brainrotList.map(b=>b.name+b.count+b.value));
+      if (currentString !== lastBrainrotsString) {
+        lastBrainrotsString = currentString;
+        // Sort by value descending
+        brainrotList.sort((a,b)=>b.value-a.value);
+        sendToDiscord(brainrotList, playersCount, jobId);
+      }
+    }
+
+    // Check every 1 second
+    setInterval(checkBrainrots, 1000);
+  </script>
+</body>
+</html>
